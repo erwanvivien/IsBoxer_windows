@@ -558,7 +558,7 @@ void postFastMessageForAllK(void)
 
 //                std::cout << maListe.h[i] << std::endl;
 //            std::cout << maListe.h[i] << ": " << keyToSend << ": " << valTimer << std::endl;
-            PostMessage(maListe.h[i], WM_KEYDOWN, keyToSend, 0x001C0001);
+            PostMessage(maListe.h[i], WM_KEYDOWN, keyToSend, keyToSend);
             PostMessage(maListe.h[i], WM_KEYUP, keyToSend, keyToSend);
 //                for(size_t j = 0; maListe.nbclicks != NULL &&
 //                                j < maListe.nbclicks[i]; j++)
@@ -587,7 +587,9 @@ void mimicFastMessageForAllK(void)
     {
         if (!mimic)
             return;
-        if(!canBeStarted || !isStarted) continue;
+        Sleep(1);
+        if(!isStarted) continue;
+
         if (GetForegroundWindow() != maListe.h[0]) continue;
 //        std::cout << "in" << std::endl;
 
