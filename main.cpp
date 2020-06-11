@@ -651,7 +651,7 @@ void checkKey(ull keys[191], size_t KEY, size_t real_key)
         if (keys[KEY] == 0) return;
 
         keys[KEY] = 0;
-        for(size_t i = 0; i < maListe.number && maListe.h[i] != NULL; i++)
+        for(size_t i = 1; i < maListe.number && maListe.h[i] != NULL; i++)
         {
 //                    PostMessage(maListe.h[i], WM_KEYDOWN, KEY, KEY);
             PostMessage(maListe.h[i], WM_KEYUP, KEY, KEY);
