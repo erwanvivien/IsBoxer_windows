@@ -1,6 +1,5 @@
 # IsBoxer-windows
 
----------------------------
 ## A very simple ISBoxer
 This allows you to play a same game multiple times.
 
