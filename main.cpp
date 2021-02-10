@@ -4,90 +4,63 @@
     #define UNICODE
 #endif
 
-#define MAX_LEN 256
 #include <tchar.h>
-#include "res.h"
-
 #include <windows.h>
 #include <iostream>
 #include <thread>
 #include <mutex>
+#include <time.h>
+#include <sstream>
+#include <stdlib.h>
 
-#define ull unsigned long long
-#define ll long long
+#include "UI.h"
+#include "windowing.h"
+#include "resources.h"
+#include "Llist.h"
 
-struct listChain{
-    size_t number, *nbclicks;
-    HWND *h;
-    RECT *r;
-    POINT **p;
-};
+#define MAX_LEN 1000
 
-std::mutex mut;
+LRESULT CALLBACK WindowProcedure (HWND, UINT, WPARAM, LPARAM);
+TCHAR szClassName[ ] = _T("CodeBlocksWindowsApp");
 
-unsigned long long get_time_ms(void)
-{
-    auto now = std::chrono::system_clock::now();
-    auto duration = now.time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-}
+#include "GLOBALS.h"
 
+size_t sWidth = 0, sHeight = 0;
 
-/*  Make the class name into a global variable  */
-TCHAR szClassName[ ] = _T("Is Boxer");
 HWND hwndALL, hwndToggle, hwndText1, hwndText2,
-     hwndTimer, hwndNumber, hwndRegister,
+     hwndRepeatTimer, hwndNumberWindow, hwndRegister,
      hwndTextTime, hwndChangeKey, hwndWindowNb, hwndWindowClickNb,
-     hwndAddClicks, hwndMimic, hwndMimicMovement;               /* This is the handle for our window */
+     hwndAddClicks, hwndMimic, hwndMimicMovement, hwndHandleTextField,
+     hwndIsPlaceWindow, hwndBordersToggle;               /* This is the handle for our window */
 
+size_t valTimer = 500;
 
-BOOL canBeStarted = FALSE, isStarted = FALSE, changeKey = FALSE, isBug = FALSE,
-    mimic = FALSE, avoidMovementKey = TRUE;
+struct Llist maListe;
 
-unsigned int nbKeyToPress = 1;
-unsigned int valNumbr = 1;
-unsigned int valTimer = 500;
-unsigned int valSelectedW = 0;
-unsigned int valNbAdd = 2;
+size_t focusedOne = 0;
+
+BOOL isMimic = true, isChangingKey = false,
+    isStarted = false, canBeStarted = false,
+    isMimicMovement = false, isBug = false,
+    isPlaceWindow = false;
+
 WPARAM keyToSend = VK_F6;
 
-struct listChain maListe; /// List of all handles
+size_t valNumber = 4;
 
-LRESULT CALLBACK WindowProcedure
-            (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
-void postFastMessageForAllK(void);
-void mimicFastMessageForAllK(void);
-void checkKey(ull keys[191], size_t KEY, size_t real_key = 0);
-
-ull start = 0;
-
-RECT getRect(HWND h)
-{
-    RECT r, r1;
-    GetWindowRect(h, &r);
-    GetClientRect(h, &r1);
-    r.bottom = r1.bottom;
-    r.right = r1.right;
-//    maListe.r[i] = r;
-    return r;
-}
+char valTimerC[20] = "500";
+char valNumberC[20] = "5";
+char valHandleC[1000] = "";
 
 
 int WINAPI WinMain (HINSTANCE hThisInstance,
-                     __attribute__((unused)) HINSTANCE hPrevInstance,
-                     __attribute__((unused)) LPSTR lpszArgument,
+                     HINSTANCE hPrevInstance,
+                     LPSTR lpszArgument,
                      int nCmdShow)
 {
     MSG messages;            /* Here messages to the application are saved */
     WNDCLASSEX wincl;        /* Data structure for the windowclass */
 
-    char valTimerC[10] = "500\0";
-    char valSelectedWC[10] = "0\0";
-    char valNbAddC[10] = "2\0";
-    char valNumbrC[10] = "1\0";
-
-
-    {
     /* The Window structure */
     wincl.hInstance = hThisInstance;
     wincl.lpszClassName = szClassName;
@@ -95,216 +68,95 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
     wincl.style = CS_DBLCLKS;                 /* Catch double-clicks */
     wincl.cbSize = sizeof (WNDCLASSEX);
 
-    /* Use default icon and mouse-pointer */
-    wincl.hIcon = LoadIcon (NULL, IDI_APPLICATION);
-    wincl.hIconSm = LoadIcon (NULL, IDI_APPLICATION);
-    wincl.hCursor = LoadCursor (NULL, IDC_ARROW);
-    wincl.lpszMenuName = MAKEINTRESOURCE(IDR_MYMENU);                 /* No menu */
+    wincl.hIcon = ::LoadIcon (NULL, IDI_APPLICATION);
+    wincl.hIconSm = ::LoadIcon (NULL, IDI_APPLICATION);
+    wincl.hCursor = ::LoadCursor (NULL, IDC_ARROW);
+    wincl.lpszMenuName = NULL;                 /* No menu */
     wincl.cbClsExtra = 0;                      /* No extra bytes after the window class */
     wincl.cbWndExtra = 0;                      /* structure or the window instance */
-    /* Use Windows's default colour as the background of the window */
     wincl.hbrBackground = (HBRUSH) COLOR_BACKGROUND;
 
-    /* Register the window class, and if it fails quit the program */
-    if (!RegisterClassEx (&wincl))
+    if (!::RegisterClassEx (&wincl))
         return 0;
 
-    /* The class is registered, let's create the program*/
-    hwndALL = CreateWindowEx (
-           0,                   /* Extended possibilites for variation */
-           szClassName,         /* Classname */
-           szClassName,//_T("Code::Blocks Template Windows App"),       /* Title Text */
-           WS_OVERLAPPEDWINDOW, /* default window */
-           CW_USEDEFAULT,       /* Windows decides the position */
-           CW_USEDEFAULT,       /* where the window ends up on the screen */
-           544,                 /* The programs width */
-           375,                 /* and height in pixels */
-           HWND_DESKTOP,        /* The window is a child-window to desktop */
-           NULL,                /* No menu */
-           hThisInstance,       /* Program Instance handler */
-           NULL                 /* No Window Creation data */
-       );
-    ShowWindow (hwndALL, nCmdShow);
+    /// MAIN WINDOW
+    hwndALL = createMain (HWND_DESKTOP, hThisInstance, szClassName);
+        /// Shows the application
+    ::ShowWindow (hwndALL, nCmdShow);
 
-    hwndToggle = CreateWindow(
-        "BUTTON",  // Predefined class; Unicode assumed
-        "It's OFF",      // Button text
-        WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles
-        10,         // x position
-        10,         // y position
-        100,        // Button width
-        100,        // Button height
-        hwndALL,       // Parent window
-        (HMENU)ID_TOGGLE,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
+    /// Toggle
+    hwndToggle = createToggle (hThisInstance);
 
-    hwndRegister = CreateWindow(
-        "BUTTON",  // Predefined class; Unicode assumed
-        "Register",      // Button text
-        WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON | BS_MULTILINE,  // Styles
-        10,         // x position
-        120,         // y position
-        100,        // Button width
-        100,        // Button height
-        hwndALL,       // Parent window
-        (HMENU)ID_REGISTER,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
+    /// Registers
+    hwndRegister = createRegister (hThisInstance);
+    hwndNumberWindow = createNumberWindow (hThisInstance);
+    hwndTextTime = createTextTime (hThisInstance);
 
-    hwndTimer = CreateWindow(
-        "EDIT",  // Predefined class; Unicode assumed
-        valTimerC,      // Button text
-        ES_NUMBER | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles
-        225,         // x position
-        45,         // y position
-        60,        // Button width
-        18,        // Button height
-        hwndALL,       // Parent window
-        (HMENU)ID_TIMER,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
+    /// Repeater
+    hwndChangeKey = createChangeKey (hThisInstance);
+    hwndRepeatTimer = createRepeatTimer (hThisInstance);
 
-    hwndWindowNb = CreateWindow(
-        "EDIT",  // Predefined class; Unicode assumed
-        valSelectedWC,      // Button text
-        ES_NUMBER | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles
-        325,         // x position
-        45,         // y position
-        60,        // Button width
-        18,        // Button height
-        hwndALL,       // Parent window
-        (HMENU)ID_SELECTW,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
-    hwndWindowClickNb = CreateWindow(
-        "EDIT",  // Predefined class; Unicode assumed
-        valNbAddC,      // Button text
-        ES_NUMBER | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles
-        325,         // x position
-        85,         // y position
-        60,        // Button width
-        18,        // Button height
-        hwndALL,       // Parent window
-        (HMENU) ID_ADDCLICK,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
+    /// Mimics
+    hwndMimic = createIsMimic (hThisInstance);
+    hwndMimicMovement = createIsMimicMovement (hThisInstance);
+    hwndIsPlaceWindow = createIsPlaceWindow (hThisInstance);
+    hwndBordersToggle = createBordersToggle (hThisInstance);
 
-    hwndAddClicks = CreateWindow(
-        "BUTTON",  // Predefined class; Unicode assumed
-        "AddClicks",      // Button text
-        WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON | BS_MULTILINE,  // Styles
-        325,         // x position
-        120,         // y position
-        100,        // Button width
-        100,        // Button height
-        hwndALL,       // Parent window
-        (HMENU)ID_ADDCLICK,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
+        /// This sets the checkbox to be checked by default
+    ::SendMessage(hwndMimic, BM_SETCHECK, BST_CHECKED, 0);
+
+    /// Handle text
+////////    hwndHandleTextField = createHandleTextField (hThisInstance);
 
 
-    hwndNumber = CreateWindow(
-        "EDIT",  // Predefined class; Unicode assumed
-        valNumbrC,      // Button text
-        ES_NUMBER | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles
-        225,         // x position
-        155,         // y position
-        30,        // Button width
-        18,        // Button height
-        hwndALL,       // Parent window
-        (HMENU)ID_NUMBER,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
-
-    hwndText1 = CreateWindow(
-        "STATIC",  // Predefined class; Unicode assumed
-        "The number of windows you wanna handle :",      // Button text
-        WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles
-        115,         // x position
-        145,         // y position
-        100,        // Button width
-        50,        // Button height
-        hwndALL,       // Parent window
-        NULL,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
-    hwndText2 = CreateWindow(
-        "STATIC",  // Predefined class; Unicode assumed
-        "The timer between each action\n(\'0\' to disable)",      // Button text
-        WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles
-        115,         // x position
-        25,         // y position
-        100,        // Button width
-        70,        // Button height
-        hwndALL,       // Parent window
-        NULL,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
-    hwndTextTime = CreateWindow(
-        "STATIC",  // Predefined class; Unicode assumed
-        "0",      // Button text
-        WS_CHILD | BS_DEFPUSHBUTTON,  // Styles
-        35,         // x position
-        230,         // y position
-        50,        // Button width
-        18,        // Button height
-        hwndALL,       // Parent window
-        NULL,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
-    hwndChangeKey = CreateWindow(
-        "BUTTON",  // Predefined class; Unicode assumed
-        "F6",      // Button text
-        WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles
-        135,         // x position
-        230,         // y position
-        50,        // Button width
-        50,        // Button height
-        hwndALL,       // Parent window
-        (HMENU)ID_CHANGEKEY,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
-    hwndMimic = CreateWindow(
-        "BUTTON",  // Predefined class; Unicode assumed
-        "Mimic",      // Button text
-        BS_CHECKBOX | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles
-        50,         // x position
-        230,         // y position
-        70,        // Button width
-        50,        // Button height
-        hwndALL,       // Parent window
-        (HMENU)ID_MIMIC,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
-    hwndMimicMovement = CreateWindow(
-        "BUTTON",  // Predefined class; Unicode assumed
-        "Mov. Keys",      // Button text
-        BS_CHECKBOX | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles
-        135,         // x position
-        230,         // y position
-        100,        // Button width
-        50,        // Button height
-        hwndALL,       // Parent window
-        (HMENU)ID_MIMIC_MOVEMENT,       // No menu.
-        hThisInstance,
-        NULL);      // Pointer not needed.
-    }
-
-    std::thread t(postFastMessageForAllK);
+    std::thread t(mimicFastMessageForAllK);
     t.detach();
-    ShowWindow (hwndALL, nCmdShow);
 
-    start = get_time_ms();
-    maListe.p = (POINT**) malloc(sizeof(POINT*));
-    maListe.nbclicks = (size_t*) malloc(sizeof(size_t));
-    while (GetMessage (&messages, NULL, 0, 0) > 0)
+
+//    ::ShowWindow (hwndALL, nCmdShow);
+//
+//    ::Sleep(2000);
+//    HWND ttt [4] = { NULL };
+//    for(size_t i = 0; i < 4; i ++)
+//    {
+//        ::Sleep(1000);
+//        std::cout << "GO" << std::endl;
+//        ttt[i] = ::GetForegroundWindow();
+//    }
+//    for(size_t i = 0; i < 4; i ++)
+//    {
+//        changeBorders(ttt[i], false);
+//    }
+//    return 0;
+//
+    {    /// Gets the screen size (main monitor AND without taskbar)
+//        const HWND hDesktop = ::GetDesktopWindow();
+        RECT desktopRect;
+        ::SystemParametersInfo(SPI_GETWORKAREA, 0, &desktopRect, 0);
+
+        sWidth = desktopRect.right;
+        sHeight = desktopRect.bottom;
+    };
+
+    while (::GetMessage (&messages, NULL, 0, 0))
     {
-        TranslateMessage(&messages);
-        DispatchMessage(&messages);
+        ::TranslateMessage(&messages);
+        ::DispatchMessage(&messages);
 
-        char tmp[MAX_LEN];
-        GetWindowText(hwndTimer, tmp, MAX_LEN);
+        ::ShowWindow (hwndChangeKey, !isMimic);
+        ::ShowWindow (hwndMimicMovement, isMimic);
+        ::ShowWindow (hwndIsPlaceWindow, isMimic);
+        ::EnableWindow (hwndRepeatTimer, !isMimic && !isStarted);
+        ::EnableWindow (hwndChangeKey, !isMimic && !isStarted);
+        ::EnableWindow (hwndMimic, true);
+        ::EnableWindow (hwndRegister, !isStarted);
+        ::EnableWindow (hwndNumberWindow, !isStarted);
+        ::EnableWindow (hwndToggle, canBeStarted && !isBug);
+        ::EnableWindow (hwndIsPlaceWindow, canBeStarted && !isBug);
+
+
+        char tmp[MAX_LEN] = { 0 };
+        GetWindowText(hwndRepeatTimer, tmp, MAX_LEN);
         if(strcmp(tmp, valTimerC) != 0)
         {
             strcpy(valTimerC, tmp);
@@ -312,172 +164,186 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
             isBug = strcmp(tmp, "") == 0 || valTimer == 0;
         }
 
-        GetWindowText(hwndWindowClickNb, tmp, MAX_LEN);
-        if(strcmp(tmp, valNbAddC) != 0)
-        {
-            strcpy(valNbAddC, tmp);
-            valNbAdd = atoi(valNbAddC);
-            isBug = strcmp(tmp, "") == 0 || valTimer == 0;
 
-            maListe.p[valSelectedW] = (POINT*) realloc(maListe.p[valSelectedW], valNbAdd * sizeof(POINT));
-        }
+////////        memset(tmp, 0, MAX_LEN * sizeof(char));
+////////        GetWindowText(hwndHandleTextField, tmp, MAX_LEN);
+////////        if(strcmp(tmp, valHandleC) != 0)
+////////        {
+////////            strcpy(valHandleC, tmp);
+////////
+////////            int nbHandle = 0;
+////////            size_t newHandle = 0;
+////////            size_t i;
+////////
+////////            if (valHandleC[0] != '0' || valHandleC[1] != 'x') continue;
+////////            for(i = 2; valHandleC[i] != '\0' && i < 1000; i++)
+////////            {
+////////                char c = valHandleC[i];
+////////                switch (c)
+////////                {
+////////                case 'a' ... 'f':
+////////                    newHandle *= 16;
+////////                    newHandle += 10 + (c - 'a');
+////////                    break;
+////////                case '0' ... '9':
+////////                    newHandle *= 16;
+////////                    newHandle += (c - '0');
+////////                    break;
+////////                case '\n':
+////////                {
+////////                    ++nbHandle;
+////////                    if (nbHandle > maListe.number)
+////////                    {
+////////                        HWND *tmp1 = (HWND *) realloc(maListe.h, nbHandle);
+////////                        RECT *tmp2 = (RECT *) realloc(maListe.r, nbHandle);
+////////
+////////                        if (tmp1 == NULL) return 1;
+////////                        if (tmp2 == NULL) return 1;
+////////
+////////                        maListe.h = tmp1;
+////////                        maListe.r = tmp2;
+////////                    }
+////////
+////////                    maListe.h[nbHandle - 1] = (HWND) newHandle;
+////////                    maListe.r[nbHandle - 1] = getRect(maListe.h[nbHandle - 1]);
+////////
+////////                    newHandle = 0;
+////////
+////////                    if (valHandleC[++i] != '0' || valHandleC[++i] != 'x') i = 1000;
+////////                }
+////////                    break;
+////////                default:
+////////                    i = 1000;
+////////                    break;
+////////                }
+////////            }
+////////
+////////            if (i < 1000 && valHandleC[i] == '\0')
+////////                ::MessageBeep(MB_ICONERROR);
+////////
+//////////            valTimer = atoi(valTimerC);
+//////////            isBug = strcmp(tmp, "") == 0 || valTimer == 0;
+////////        }
 
-        GetWindowText(hwndWindowNb, tmp, MAX_LEN);
-        if(strcmp(tmp, valSelectedWC) != 0)
-        {
-            strcpy(valSelectedWC, tmp);
-            valSelectedW = atoi(valSelectedWC);
-            isBug = strcmp(tmp, "") == 0 || valTimer == 0;
-        }
+//        GetWindowText(hwndWindowClickNb, tmp, MAX_LEN);
+//        if(strcmp(tmp, valNbAddC) != 0)
+//        {
+//            strcpy(valNbAddC, tmp);
+//            valNbAdd = atoi(valNbAddC);
+//            isBug = strcmp(tmp, "") == 0 || valTimer == 0;
+//
+//            maListe.p[valSelectedW] = (POINT*) realloc(maListe.p[valSelectedW], valNbAdd * sizeof(POINT));
+//        }
 
-        GetWindowText(hwndNumber, tmp, MAX_LEN);
-        if(strcmp(tmp, valNumbrC) != 0)
+//        GetWindowText(hwndWindowNb, tmp, MAX_LEN);
+//        if(strcmp(tmp, valSelectedWC) != 0)
+//        {
+//            strcpy(valSelectedWC, tmp);
+//            valSelectedW = atoi(valSelectedWC);
+//            isBug = strcmp(tmp, "") == 0 || valTimer == 0;
+//        }
+
+        memset(tmp, 0, MAX_LEN * sizeof(char));
+        GetWindowText(hwndNumberWindow, tmp, MAX_LEN);
+        if(strcmp(tmp, valNumberC) != 0)
         {
+            printf("%d\n", valNumber);
             canBeStarted = FALSE;
             isStarted = FALSE;
             SetWindowText(hwndRegister, "Register");
-            strcpy(valNumbrC, tmp);
-            maListe.p = (POINT**) malloc(valNumbr * sizeof(POINT*));
-            maListe.nbclicks = (size_t*) malloc(valNumbr * sizeof(size_t));
-            for(size_t i = 0; i < valNumbr; i ++)
-            {
-                maListe.p[i] = NULL;
-                maListe.nbclicks[i] = 0;
-            }
+            strcpy(valNumberC, tmp);
+            //Lfree(maListe);
+//            maListe.p = (POINT**) malloc(valNumbr * sizeof(POINT*));
+//            maListe.nbclicks = (size_t*) malloc(valNumbr * sizeof(size_t));
+//            for(size_t i = 0; i < valNumber; i ++)
+//            {
+//                maListe.p[i] = NULL;
+//                maListe.nbclicks[i] = 0;
+//            }
 
-            valNumbr = atoi(valNumbrC);
-            if(strcmp(tmp, "") == 0 || valNumbr == 0)
+            valNumber = atoi(valNumberC);
+            if(strcmp(tmp, "") == 0 || valNumber == 0)
                 canBeStarted = FALSE;
         }
-
-        EnableWindow( hwndTimer, !mimic && !isStarted);
-        EnableWindow( hwndChangeKey, !mimic && !isStarted);
-        EnableWindow( hwndMimic, true);
-        ShowWindow( hwndMimicMovement, mimic);
-        ShowWindow( hwndChangeKey, !mimic);
-        EnableWindow( hwndWindowClickNb, false /**canBeStarted && !isStarted*/ );
-        EnableWindow( hwndWindowNb, false /**canBeStarted && !isStarted*/ );
-        EnableWindow( hwndAddClicks, false /**canBeStarted && !isStarted*/ );
-        EnableWindow( hwndRegister, !isStarted);
-        EnableWindow( hwndNumber, !isStarted);
-        EnableWindow( hwndToggle, canBeStarted && !isBug);
     }
+
     return messages.wParam;
 }
 
-/*  This function is called by the Windows function DispatchMessage()  */
 LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-//    std::cout << message << " " << wParam << ' ' << lParam << std::endl;
-    switch (message)                  /* handle the messages */
+    switch (message)
     {
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
         case WM_MBUTTONDOWN:
-            changeKey = FALSE;
-            SetFocus(hwndALL);
+            isChangingKey = FALSE;
+            ::SetFocus(hwndALL);
         break;
+
         case WM_COMMAND:
-            changeKey = FALSE;
-
-            switch(/*LOWORD*/(wParam))
+            isChangingKey = false;
+            switch (wParam)
             {
-                case ID_TOGGLE:
-                    if(!isStarted && canBeStarted)
-                    {
-                        SetWindowText(hwndToggle, "It's ON");
-                    }
-                    else
-                    {
-                        SetWindowText(hwndToggle, "It's OFF");
-                    }
-                    isStarted = !isStarted && canBeStarted;
-
-                    SetFocus(hwndALL);
-                break;
-                case ID_REGISTER:
-                {
-                    ShowWindow (hwndChangeKey, SW_SHOWNORMAL);
-                    UpdateWindow(hwnd);
-
-                    maListe.number = valNumbr;
-                    maListe.h = (HWND*) malloc(maListe.number * sizeof(HWND)); /// allocating it
-                    maListe.r = (RECT*) malloc(maListe.number * sizeof(RECT)); /// allocating it
-
-                    ShowWindow (hwndTextTime, SW_SHOWNORMAL);
-                    UpdateWindow(hwnd);
-
-                    ull ms1 = get_time_ms();
-                    for(size_t i = 0; i < maListe.number;)
-                    {
-                        ull ms2 = get_time_ms();
-
-                        size_t dif = 1500-(ms2 - ms1);
-                        if(dif % 50 == 0)
-                        {
-                            char tmp[12];
-                            sprintf(tmp, "%llu", dif);
-                            SetWindowText(hwndTextTime, tmp);
-                        }
-                        if( ms2 - ms1 >= 1500 )
-                        {
-                            maListe.r[i] = getRect(maListe.h[i]);
-                            maListe.h[i] = GetForegroundWindow();
-
-                            std::cout << "Got Handle - " << maListe.h[i] << std::endl;
-                            i++;
-                            ms1 = ms2;
-                            MessageBeep(MB_ICONERROR);
-                        }
-                        //Sleep(5);
-                    } /// Get all the handles (one by one)
-                      /// Doing it by getting the focused window
-                      /// and sets the midpoint of the window
-                    canBeStarted = TRUE;
-                    SetWindowText(hwndRegister, "Register\n(done)");
-//
-//                    for(size_t i = 0; i < maListe.number; i++)
-//                    {
-//
-//
-//                    }
-//
-                    ShowWindow (hwndTextTime, FALSE);
-                    UpdateWindow(hwnd);
-                    SetFocus(hwndALL);
-                    SetForegroundWindow(hwndALL);
-                }
-                break;
-                case ID_ADDCLICK:
-                    if(valSelectedW >= valNumbr) break;
-                    maListe.r[valSelectedW] = getRect(maListe.h[valSelectedW]);
-                    maListe.nbclicks[valSelectedW] = valNbAdd;
-                    maListe.p[valSelectedW] = (POINT*) malloc(sizeof(POINT) * valNbAdd);
-
-                    SetForegroundWindow(maListe.h[valSelectedW]);
-                    for(size_t i = 0; i < valNbAdd; i ++)
-                    {
-                        Sleep(2000);
-                        POINT p;
-
-                        GetCursorPos(&p);
-                        ScreenToClient(maListe.h[valSelectedW], &p);
-                        if(p.x < 0 || p.y < 0) break;
-                        p.y += 30;
-                        maListe.p[valSelectedW][i] = p;
-                        MessageBeep(MB_ICONASTERISK);
-                    }
-
-                    break;
                 case ID_TIMER:
                 case ID_NUMBER:
-                    //SetFocus(hwndALL);
-                case ID_CHANGEKEY:
-                    changeKey = TRUE;
+                    break;
+                case ID_TOGGLE:
+                    SetWindowText(hwndToggle, !isStarted && canBeStarted ?
+                                  "It's ON" : "It's OFF");
+                    isStarted = !isStarted && canBeStarted;
+
+                    if (isStarted && isMimic && isPlaceWindow)
+                    {
+                        for(size_t i = 0; i < maListe.number; i ++)
+                            setBorders(maListe.h[i], !isStarted && isPlaceWindow);
+                        changeWindowPositions();
+                    }
+
                     SetFocus(hwndALL);
-                break;
+
+                    break;
+                case ID_REGISTER:
+                {
+                    Lfree(maListe);
+
+                    maListe.number = valNumber;
+                    updateList(&maListe, hwnd);
+
+                    canBeStarted = TRUE;
+                    ::SetWindowText(hwndRegister, "Register\n(done)");
+
+                    ::SetFocus(hwndALL);
+                    ::SetForegroundWindow(hwndALL);
+
+//                    std::string s = "";
+//                    for (size_t i = 0; i < maListe.number; i++)
+//                    {
+//                        std::stringstream stringstreamBuffer;
+//                        stringstreamBuffer << maListe.h[i] << std::endl;
+//                        s += stringstreamBuffer.str();
+//                    }
+//
+//                    ::SetWindowText(hwndHandleTextField, s.c_str());
+                }
+                    break;
+                case ID_TOGGLE_BORDERS:
+                {
+                    BOOL borders = (WS_THICKFRAME & GetWindowLong(maListe.h[0], GWL_STYLE)) == 0;
+                    for(size_t i = 0; i < maListe.number; i ++)
+                        setBorders(maListe.h[i], borders);
+                    ::SetFocus(hwndALL);
+                }
+                    break;
+
+                case ID_CHANGEKEY:
+                    isChangingKey = TRUE;
+                    ::SetFocus(hwndALL);
+                    break;
+
                 case ID_MIMIC:
-                    if (!mimic)
+                    isMimic = !isMimic;
+                    if (isMimic)
                     {
                         std::thread t(mimicFastMessageForAllK);
                         t.detach();
@@ -487,30 +353,32 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
                         std::thread t(postFastMessageForAllK);
                         t.detach();
                     }
-
-                    mimic = !mimic;
-
-                    SetFocus(hwndALL);
+                    ::SetFocus(hwndALL);
                     break;
                 case ID_MIMIC_MOVEMENT:
-                    avoidMovementKey = !avoidMovementKey;
+                    isMimicMovement = !isMimicMovement;
+                    SetFocus(hwndALL);
+                    break;
+                case ID_PLACE_WINDOW:
+                    isPlaceWindow = !isPlaceWindow;
+
                     SetFocus(hwndALL);
                     break;
                 case ID_FILE_EXIT:
                     PostMessage(hwnd, WM_CLOSE, 0, 0);
-                break;
+                    break;
             }
-        break;
+            break;
         case WM_KEYDOWN:
             switch(wParam)
             {
                 case VK_ESCAPE:
-                    if(changeKey == FALSE && lParam == 1073807361) PostQuitMessage(0);
-                    if(changeKey == TRUE) changeKey = FALSE;
+                    if(isChangingKey == false && lParam == 1073807361) PostQuitMessage(0);
+                    if(isChangingKey == true) isChangingKey = false;
                     SetFocus(hwndALL);
-                break;
+                    break;
                 default:
-                    if(changeKey)
+                    if(isChangingKey)
                     {
                         keyToSend = wParam;
                         LPSTR s = (LPSTR) malloc(10 * sizeof(char));
@@ -518,145 +386,22 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 
                         SetWindowText(hwndChangeKey, s);
                         free(s);
-                        changeKey = FALSE;
+                        isChangingKey = false;
                     }
-                break;
+                    break;
             }
-        break;
+            break;
         case WM_KEYUP:
-
-        break;
-
+            break;
         case WM_DESTROY:
         case WM_CLOSE:
-            PostQuitMessage(0);       /* send a WM_QUIT to the message queue */
+
+            ::PostQuitMessage (0);
             break;
-        default:                      /* for messages that we don't deal with */
-            return DefWindowProc (hwnd, message, wParam, lParam);
+        default:
+            return ::DefWindowProc (hwnd, message, wParam, lParam);
     }
+
     return 0;
 }
-
-
-
-void postFastMessageForAllK(void)
-{
-    while(1)
-    {
-        if (mimic)
-            return;
-
-        //if(!canBeStarted) continue;
-//        MessageBox(NULL, (isStarted ? "true" : "false"), "title", 0);
-        Sleep(1);
-        if(!isStarted) continue;
-        //MessageBeep(MB_ICONERROR);
-
-        for(size_t i = 0; i < maListe.number && maListe.h[i] != NULL; i++)
-        {
-//                maListe.r[i] = getRect(maListe.h[i]);
-
-//                std::cout << maListe.h[i] << std::endl;
-//            std::cout << maListe.h[i] << ": " << keyToSend << ": " << valTimer << std::endl;
-            PostMessage(maListe.h[i], WM_KEYDOWN, keyToSend, keyToSend);
-            PostMessage(maListe.h[i], WM_KEYUP, keyToSend, keyToSend);
-//                for(size_t j = 0; maListe.nbclicks != NULL &&
-//                                j < maListe.nbclicks[i]; j++)
-//                {
-//                    int x = maListe.p[i][j].x*2,
-//                        y = maListe.p[i][j].y;
-//                    int x = 100, y = 100;
-//                    std::cout << x << " - " << y << std::endl;
-//                    LPARAM lP = x | (y << 16);
-//
-//                    PostMessage(maListe.h[i], WM_LBUTTONDOWN, MK_LBUTTON, lP);
-//                    PostMessage(maListe.h[i], WM_LBUTTONUP  , 0, lP);
-//                    Sleep(5000);
-//                }
-            //MessageBeep(MB_ICONERROR);
-        }
-
-        Sleep(valTimer);
-    }
-}
-
-void mimicFastMessageForAllK(void)
-{
-    ull keys[191] = { 0 };
-    while(1)
-    {
-        if (!mimic)
-            return;
-        Sleep(1);
-        if(!isStarted) continue;
-
-        if (GetForegroundWindow() != maListe.h[0]) continue;
-//        std::cout << "in" << std::endl;
-
-        for (unsigned char KEY = 'A'; KEY <= 'Z'; KEY++)
-        {
-            if (avoidMovementKey && (KEY == 'Z' || KEY == 'Q' || KEY == 'S' || KEY == 'D')) continue;
-            checkKey(keys, (size_t) KEY);
-        }
-        for (unsigned char KEY = VK_NUMPAD0; KEY <= VK_NUMPAD9; KEY++)
-        {
-            checkKey(keys, (size_t) KEY);
-        }
-        for (unsigned char KEY = '0'; KEY <= '9'; KEY++)
-        {
-            checkKey(keys, (size_t) KEY);
-        }
-//        checkKey(keys, (size_t) '0', 'à');
-//        checkKey(keys, (size_t) '1', '&');
-//        checkKey(keys, (size_t) '2', 'é');
-//        checkKey(keys, (size_t) '3', '"');
-//        checkKey(keys, (size_t) '4', '\'');
-//        checkKey(keys, (size_t) '5', '(');
-//        checkKey(keys, (size_t) '6', '-');
-//        checkKey(keys, (size_t) '7', 'è');
-//        checkKey(keys, (size_t) '8', '_');
-//        checkKey(keys, (size_t) '9', 'ç');
-
-
-//        std::cout << "test2" << std::endl;
-        Sleep(15);
-    }
-}
-
-void checkKey(ull keys[191], size_t KEY, size_t real_key)
-{
-    if (real_key == 0)
-        real_key = KEY;
-    ull THRESHOLD = 0;
-
-    if (GetAsyncKeyState(KEY) & 0x8000)
-    {
-        if (get_time_ms() - keys[KEY] < THRESHOLD && keys[KEY] != 0)  return;
-
-        for(size_t i = 1; i < maListe.number && maListe.h[i] != NULL; i++)
-            PostMessage(maListe.h[i], WM_KEYDOWN, real_key, real_key);
-
-//        std::cout << (int) KEY << ": " << KEY << std::endl;
-
-        if (keys[KEY] == 0)
-        {
-//            std::cout << (int) KEY << ": " << KEY << std::endl;
-            keys[KEY] = get_time_ms();
-            for(size_t i = 1; i < maListe.number && maListe.h[i] != NULL; i++)
-                PostMessage(maListe.h[i], WM_KEYUP, real_key, real_key);
-        }
-    }
-    else
-    {
-        if (keys[KEY] == 0) return;
-
-        keys[KEY] = 0;
-        for(size_t i = 1; i < maListe.number && maListe.h[i] != NULL; i++)
-        {
-//                    PostMessage(maListe.h[i], WM_KEYDOWN, KEY, KEY);
-            PostMessage(maListe.h[i], WM_KEYUP, KEY, KEY);
-        }
-    }
-}
-
 
