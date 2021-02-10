@@ -1,0 +1,8 @@
+*.cbp
+
+*.layout
+*.depend
+
+*.cscope*
+
+obj
